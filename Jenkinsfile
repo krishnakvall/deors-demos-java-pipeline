@@ -2,9 +2,7 @@
 
 pipeline {
     agent {
-        label {
-            'test-jenkins-slave maven'
-        }
+        label "test-jenkins-slave maven"
     }
 
     environment {
