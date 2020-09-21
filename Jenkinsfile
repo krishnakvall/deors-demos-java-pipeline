@@ -2,7 +2,7 @@
 
 pipeline {
     agent {
-        label "test-jenkins-slave maven"
+        label "jenkins maven"
     }
 
     environment {
@@ -53,27 +53,27 @@ pipeline {
                 container(name: 'kaniko', shell: '/busybox/sh') {
                     ansiColor('xterm') {
                         sh '''#!/busybox/sh
-                            /kaniko/executor -f `pwd`/Dockerfile.run -c `pwd` --cache=true --destination=${IMAGE}
+                            /kaniko/executor -f `pwd`/Dockerfile.run -c `pwd` --cache=true --destination=${env.IMAGE}
                         '''
                     }
                 }
-                // sh "docker build -t ${ORG_NAME}/${APP_NAME}:${APP_VERSION} -t ${ORG_NAME}/${APP_NAME}:latest ."
+                // sh "docker build -t ${env.ORG_NAME}/${env.APP_NAME}:${env.APP_VERSION} -t ${env.ORG_NAME}/${env.APP_NAME}:latest ."
             }
         }
 
         stage('Run Docker image') {
             steps {
                 echo "-=- run Docker image -=-"
-                sh "docker run --name ${TEST_CONTAINER_NAME} --detach --rm --network ci --expose 6300 --env JAVA_OPTS='-javaagent:/jacocoagent.jar=output=tcpserver,address=*,port=6300' ${ORG_NAME}/${APP_NAME}:latest"
+                sh "docker run --name ${env.TEST_CONTAINER_NAME} --detach --rm --network ci --expose 6300 --env JAVA_OPTS='-javaagent:/jacocoagent.jar=output=tcpserver,address=*,port=6300' ${env.ORG_NAME}/${env.APP_NAME}:latest"
             }
         }
 
         stage('Integration tests') {
             steps {
                 echo "-=- execute integration tests -=-"
-                sh "curl --retry 5 --retry-connrefused --connect-timeout 5 --max-time 5 http://${TEST_CONTAINER_NAME}:${APP_LISTENING_PORT}/${APP_CONTEXT_ROOT}/actuator/health"
-                sh "./mvnw failsafe:integration-test failsafe:verify -DargLine=\"-Dtest.selenium.hub.url=http://selenium-hub:4444/wd/hub -Dtest.target.server.url=http://${TEST_CONTAINER_NAME}:${APP_LISTENING_PORT}/${APP_CONTEXT_ROOT}\""
-                sh "java -jar target/dependency/jacococli.jar dump --address ${TEST_CONTAINER_NAME} --port 6300 --destfile target/jacoco-it.exec"
+                sh "curl --retry 5 --retry-connrefused --connect-timeout 5 --max-time 5 http://${env.TEST_CONTAINER_NAME}:${env.APP_LISTENING_PORT}/${env.APP_CONTEXT_ROOT}/actuator/health"
+                sh "./mvnw failsafe:integration-test failsafe:verify -DargLine=\"-Dtest.selenium.hub.url=http://selenium-hub:4444/wd/hub -Dtest.target.server.url=http://${env.TEST_CONTAINER_NAME}:${env.APP_LISTENING_PORT}/${env.APP_CONTEXT_ROOT}\""
+                sh "java -jar target/dependency/jacococli.jar dump --address ${env.TEST_CONTAINER_NAME} --port 6300 --destfile target/jacoco-it.exec"
                 sh "mkdir target/site/jacoco-it"
                 sh "java -jar target/dependency/jacococli.jar report target/jacoco-it.exec --classfiles target/classes --xml target/site/jacoco-it/jacoco.xml"
                 junit 'target/failsafe-reports/*.xml'
@@ -84,7 +84,7 @@ pipeline {
         stage('Performance tests') {
             steps {
                 echo "-=- execute performance tests -=-"
-                sh "./mvnw jmeter:configure jmeter:jmeter jmeter:results -Djmeter.target.host=${TEST_CONTAINER_NAME} -Djmeter.target.port=${APP_LISTENING_PORT} -Djmeter.target.root=${APP_CONTEXT_ROOT}"
+                sh "./mvnw jmeter:configure jmeter:jmeter jmeter:results -Djmeter.target.host=${env.TEST_CONTAINER_NAME} -Djmeter.target.port=${env.APP_LISTENING_PORT} -Djmeter.target.root=${env.APP_CONTEXT_ROOT}"
                 perfReport sourceDataFiles: 'target/jmeter/results/*.csv', errorUnstableThreshold: 0, errorFailedThreshold: 5, errorUnstableResponseTimeThreshold: 'default.jtl:100'
             }
         }
@@ -99,7 +99,7 @@ pipeline {
                 sh "curl -sL https://deb.nodesource.com/setup_10.x | bash -"
                 sh "apt-get install -y nodejs google-chrome-stable"
                 sh "npm install -g lighthouse@5.6.0"
-                sh "lighthouse http://${TEST_CONTAINER_NAME}:${APP_LISTENING_PORT}/${APP_CONTEXT_ROOT}/hello --output=html --output=csv --chrome-flags=\"--headless --no-sandbox\""
+                sh "lighthouse http://${env.TEST_CONTAINER_NAME}:${env.APP_LISTENING_PORT}/${env.APP_CONTEXT_ROOT}/hello --output=html --output=csv --chrome-flags=\"--headless --no-sandbox\""
                 archiveArtifacts artifacts: '*.report.html'
                 archiveArtifacts artifacts: '*.report.csv'
             }
@@ -124,7 +124,7 @@ pipeline {
                     script  {
                         def qg = waitForQualityGate()
                         if (qg.status != 'OK' && qg.status != 'WARN') {
-                            error "Pipeline aborted due to quality gate failure: ${qg.status}"
+                            error "Pipeline aborted due to quality gate failure: ${env.qg.status}"
                         }
                     }
                 }
@@ -134,9 +134,9 @@ pipeline {
         stage('Push Docker image') {
             steps {
                 echo "-=- push Docker image -=-"
-                withDockerRegistry([ credentialsId: "${ORG_NAME}-docker-hub", url: "" ]) {
-                    sh "docker push ${ORG_NAME}/${APP_NAME}:${APP_VERSION}"
-                    sh "docker tag ${ORG_NAME}/${APP_NAME}:${APP_VERSION} ${ORG_NAME}/${APP_NAME}:latest"
+                withDockerRegistry([ credentialsId: "${env.ORG_NAME}-docker-hub", url: "" ]) {
+                    sh "docker push ${env.ORG_NAME}/${env.APP_NAME}:${env.APP_VERSION}"
+                    sh "docker tag ${env.ORG_NAME}/${env.APP_NAME}:${env.APP_VERSION} ${env.ORG_NAME}/${env.APP_NAME}:latest"
                 }
             }
         }
@@ -145,7 +145,7 @@ pipeline {
     post {
         always {
             echo "-=- remove deployment -=-"
-            sh "docker stop ${TEST_CONTAINER_NAME}"
+            sh "docker stop ${env.TEST_CONTAINER_NAME}"
         }
     }
 }
