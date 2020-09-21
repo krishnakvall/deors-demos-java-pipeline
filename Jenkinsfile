@@ -11,8 +11,8 @@ pipeline {
         APP_VERSION = "1.0-SNAPSHOT"
         APP_CONTEXT_ROOT = "/"
         APP_LISTENING_PORT = "8080"
-        TEST_CONTAINER_NAME = "ci-${APP_NAME}-${BUILD_NUMBER}"
-        DOCKER_HUB = credentials("${ORG_NAME}-docker-hub")
+        TEST_CONTAINER_NAME = "ci-appname-buildnumber"
+        DOCKER_HUB = credentials("orgname-docker-hub")
     }
 
     stages {
@@ -50,7 +50,14 @@ pipeline {
         stage('Build Docker image') {
             steps {
                 echo "-=- build Docker image -=-"
-                sh "docker build -t ${ORG_NAME}/${APP_NAME}:${APP_VERSION} -t ${ORG_NAME}/${APP_NAME}:latest ."
+                container(name: 'kaniko', shell: '/busybox/sh') {
+                    ansiColor('xterm') {
+                        sh '''#!/busybox/sh
+                            /kaniko/executor -f `pwd`/Dockerfile.run -c `pwd` --cache=true --destination=${IMAGE}
+                        '''
+                    }
+                }
+                // sh "docker build -t ${ORG_NAME}/${APP_NAME}:${APP_VERSION} -t ${ORG_NAME}/${APP_NAME}:latest ."
             }
         }
 
